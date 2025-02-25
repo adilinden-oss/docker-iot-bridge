@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    volumes:
+      - ./volumes/mosquitto/config:/mosquitto/config
+      - ./volumes/mosquitto/data:/mosquitto/data
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt:latest
+    container_name: zigbee2mqtt
+    depends_on:
+      - mosquitto
+    environment:
+      - TZ=${TZ:-America/Winnipeg}
+      - ZIGBEE2MQTT_CONFIG_MQTT_SERVER=${ZIGBEE2MQTT_CONFIG_MQTT_SERVER}
+      - ZIGBEE2MQTT_CONFIG_MQTT_USER=${ZIGBEE2MQTT_CONFIG_MQTT_USER}
+      - ZIGBEE2MQTT_CONFIG_MQTT_PASSWORD=${ZIGBEE2MQTT_CONFIG_MQTT_PASSWORD}
+      - ZIGBEE2MQTT_CONFIG_ADVANCED_LOG_SYMLINK_CURRENT=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./volumes/zigbee2mqtt/data:/app/data
+      - /run/udev:/run/udev:ro
+    devices:
+      - /dev/serial/by-id/usb-Silicon_Labs_Sonoff_Zigbee_3.0_USB_Dongle_Plus_0001-if00-port0:/dev/ttyACM0
+    group_add:
+      - dialout
+    restart: unless-stopped
+
+  rtl433:
+    image: hertzg/rtl_433:latest
+    container_name: rtl433
+    depends_on:
+      - mosquitto
+    command:
+      - "-Csi"
+      - "-Mtime:unix:usec:utc"
+      - "-Mbits"
+      - "-Mlevel"
+      - "-Mprotocol"
+      - "-Mstats:2:300"
+      - "-F${RTL433_MQTT_SERVER},\
+          retain=1,\
+          user=${RTL433_MQTT_USER},\
+          pass=${RTL433_MQTT_PASSWORD},\
+          events=rtl_433/iot-br-1/events,\
+          states=rtl_433/iot-br-1/states,\
+          devices=rtl_433/iot-br-1/devices[/type][/model][/subtype][/channel][/id]"
+    devices:
+      - "/dev/bus/usb/002/002"
+    restart: unless-stopped
+
